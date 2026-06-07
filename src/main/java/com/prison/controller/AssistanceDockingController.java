@@ -81,10 +81,13 @@ public class AssistanceDockingController {
         Optional<ReleaseDestination> destOpt = releaseDestinationRepository.findByInmateId(inmateId);
         ReleaseDestination dest = destOpt.orElse(null);
 
+        List<AssistanceDocking> dockings = assistanceDockingRepository.findByInmateId(inmateId);
+        AssistanceDocking latestDocking = dockings.isEmpty() ? null : dockings.get(dockings.size() - 1);
+
         int age = Period.between(inmate.getBirthDate(), LocalDate.now()).getYears();
 
         Map<String, Object> letter = new LinkedHashMap<>();
-        letter.put("dockingNo", "BF" + System.currentTimeMillis());
+        letter.put("dockingNo", latestDocking != null ? latestDocking.getDockingNo() : "BF" + System.currentTimeMillis());
         letter.put("generateDate", LocalDate.now().toString());
 
         Map<String, Object> inmateInfo = new LinkedHashMap<>();
@@ -96,7 +99,10 @@ public class AssistanceDockingController {
         letter.put("releaseDate", inmate.getExpectedRelease() != null ? inmate.getExpectedRelease().toString() : null);
 
         Map<String, Object> destination = new LinkedHashMap<>();
-        if (dest != null) {
+        if (latestDocking != null && latestDocking.getDestinationType() != null) {
+            destination.put("type", latestDocking.getDestinationType());
+            destination.put("address", latestDocking.getDestinationAddress());
+        } else if (dest != null) {
             destination.put("type", dest.getDestinationType());
             destination.put("address", dest.getDestinationAddress());
             destination.put("community", dest.getCommunityName());
@@ -105,16 +111,34 @@ public class AssistanceDockingController {
         letter.put("releaseDestination", destination);
 
         Map<String, Object> specialSituation = new LinkedHashMap<>();
-        specialSituation.put("hasMentalIllness", false);
-        specialSituation.put("hasEconomicDifficulty", false);
-        specialSituation.put("hasSkillSpecialty", false);
+        if (latestDocking != null) {
+            specialSituation.put("hasMentalIllness", Boolean.TRUE.equals(latestDocking.getHasMentalIllness()));
+            specialSituation.put("hasEconomicDifficulty", Boolean.TRUE.equals(latestDocking.getHasEconomicDifficulty()));
+            specialSituation.put("hasSkillSpecialty", Boolean.TRUE.equals(latestDocking.getHasSkillSpecialty()));
+            specialSituation.put("skillDescription", latestDocking.getSkillDescription());
+            specialSituation.put("description", latestDocking.getSpecialSituation());
+        } else {
+            specialSituation.put("hasMentalIllness", false);
+            specialSituation.put("hasEconomicDifficulty", false);
+            specialSituation.put("hasSkillSpecialty", false);
+        }
         letter.put("specialSituation", specialSituation);
 
-        letter.put("suggestedMeasures", Arrays.asList(
-                "开展就业指导与技能培训",
-                "落实社会保障政策",
-                "定期回访跟踪帮扶"
-        ));
+        if (latestDocking != null && latestDocking.getSuggestedMeasures() != null
+                && !latestDocking.getSuggestedMeasures().isBlank()) {
+            letter.put("suggestedMeasures", Arrays.asList(latestDocking.getSuggestedMeasures().split("；|;|\\n")));
+        } else {
+            letter.put("suggestedMeasures", Arrays.asList(
+                    "开展就业指导与技能培训",
+                    "落实社会保障政策",
+                    "定期回访跟踪帮扶"
+            ));
+        }
+
+        if (latestDocking != null) {
+            letter.put("receivingUnit", latestDocking.getReceivingUnit());
+            letter.put("status", latestDocking.getStatus());
+        }
 
         return ResponseEntity.ok(letter);
     }
